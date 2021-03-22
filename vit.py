@@ -199,21 +199,69 @@ class Transformer(nn.Module):
 
 
 
+# class VisualTransformer(nn.Module):
+#     def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int, patch_stride=None, **kwargs):
+#         super().__init__()
+#         self.input_resolution = input_resolution
+#         self.output_dim = output_dim
+#         if patch_stride is None: patch_stride = patch_size
+#         self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_stride, bias=False)
+
+#         scale = width ** -0.5
+#         self.class_embedding = nn.Parameter(scale * torch.randn(width))
+        
+        
+#         num_pathces = (input_resolution - patch_size + patch_stride) // patch_stride
+        
+#         self.positional_embedding = nn.Parameter(scale * torch.randn(num_pathces ** 2 + 1, width))
+#         self.ln_pre = LayerNorm(width)
+
+#         self.transformer = Transformer(width, layers, heads, **kwargs)
+
+#         self.ln_post = LayerNorm(width)
+#         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
+
+#     def forward(self, x: torch.Tensor):
+#         x = self.conv1(x)  # shape = [*, width, grid, grid]
+#         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
+#         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
+#         x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)  # shape = [*, grid ** 2 + 1, width]
+#         x = x + self.positional_embedding.to(x.dtype)
+#         x = self.ln_pre(x)
+
+#         x = x.permute(1, 0, 2)  # NLD -> LND
+#         x = self.transformer(x)
+#         x = x.permute(1, 0, 2)  # LND -> NLD
+
+#         x = self.ln_post(x[:, 0, :])
+
+#         if self.proj is not None:
+#             x = x @ self.proj
+
+#         return x
+
 class VisualTransformer(nn.Module):
-    def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int, patch_stride=None, **kwargs):
+    def __init__(self, input_resolution: int, patch_sizes: list, width: int, layers: int, heads: int, output_dim: int, patch_strides=None, **kwargs):
+        "A Vision Transformer with sliding patch and multi scale patch support"
         super().__init__()
         self.input_resolution = input_resolution
         self.output_dim = output_dim
-        if patch_stride is None: patch_stride = patch_size
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_stride, bias=False)
-
+        
+        if isinstance(patch_sizes, int):   patch_sizes   = listify(patch_sizes)
+        if isinstance(patch_strides, int): patch_strides = listify(patch_strides) 
+        if patch_strides is None: patch_strides = patch_sizes
+        
+        self.convs = nn.ModuleList([])
+        num_patches = 0
+        for patch_sz, stride_sz in zip(patch_sizes, patch_strides):
+            self.convs += [nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_sz, stride=stride_sz, bias=False)]
+            num_patches += ((input_resolution - patch_sz + stride_sz) // stride_sz)**2
+            
         scale = width ** -0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
         
-        
-        num_pathces = (input_resolution - patch_size + patch_stride) // patch_stride
-        
-        self.positional_embedding = nn.Parameter(scale * torch.randn(num_pathces ** 2 + 1, width))
+                
+        self.positional_embedding = nn.Parameter(scale * torch.randn(num_patches + 1, width))
         self.ln_pre = LayerNorm(width)
 
         self.transformer = Transformer(width, layers, heads, **kwargs)
@@ -221,9 +269,15 @@ class VisualTransformer(nn.Module):
         self.ln_post = LayerNorm(width)
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
 
-    def forward(self, x: torch.Tensor):
-        x = self.conv1(x)  # shape = [*, width, grid, grid]
-        x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
+    def forward(self, inp: torch.Tensor):
+        patch_embeds = []
+        for conv in self.convs:
+            out = conv(inp)  # shape = [*, width, grid, grid]
+            out = out.reshape(out.shape[0], out.shape[1], -1)  # shape = [*, width, grid ** 2]
+            patch_embeds.append(out)
+        
+        x = torch.cat(patch_embeds, dim=-1)
+        
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
         x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)  # shape = [*, grid ** 2 + 1, width]
         x = x + self.positional_embedding.to(x.dtype)
