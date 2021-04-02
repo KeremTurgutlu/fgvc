@@ -1,6 +1,6 @@
 from fastai.vision.all import *
 
-def generate_batch_attention_maps(attn_wgts, targ_sz, mode='bilinear'):
+def generate_batch_attention_maps(attn_wgts, targ_sz=None, mode=None):
     "Generate attention flow maps with shape (targ_sz,targ_sz) from L layer attetion weights of transformer model"
     # Stack for all layers - BS x L x K x gx x gy
     att_mat = torch.stack(attn_wgts, dim=1)
@@ -30,6 +30,6 @@ def generate_batch_attention_maps(attn_wgts, targ_sz, mode='bilinear'):
                                          (targ_sz,targ_sz), 
                                          mode=mode)[0].detach().cpu().numpy()
     elif mode is None:
-        joint_attentions = joint_attentions.detach().cpu().numpy()
+        joint_attentions = joint_attentions
     
     return joint_attentions
