@@ -10,8 +10,8 @@ from skimage.measure import label, regionprops
 from skimage.morphology import closing, square, area_closing
 from skimage.color import label2rgb
 
-def generate_attention_coordinates(attention_map, thresh_method='local', block_size=21, method='gaussian',
-                                   min_area=32*32, max_area=160*160, num_bboxes=1, random_crop_sz=112):
+def generate_attention_coordinates(attention_map, thresh_method='mean', block_size=21, method='gaussian',
+                                   min_area=32*32, num_bboxes=1, random_crop_sz=112):
     "Generate coordinates from a single attention heatmap (sz,sz)"
     if   thresh_method == 'local':  thresh = threshold_local(attention_map, block_size=block_size, method=method)
     elif thresh_method == 'mean':   thresh = threshold_mean(attention_map)
@@ -20,7 +20,7 @@ def generate_attention_coordinates(attention_map, thresh_method='local', block_s
     # calculate attention cooords
     coordinates = []
     for region in regionprops(label(closing(attention_map > thresh))):
-        if (region.area >= min_area) and (region.area <= max_area):
+        if (region.area >= min_area):
             minr, minc, maxr, maxc = region.bbox
             vals = attention_map[minr:maxr, minc:maxc]
             conf = vals.max()
