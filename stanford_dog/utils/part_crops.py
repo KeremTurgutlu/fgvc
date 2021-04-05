@@ -99,7 +99,7 @@ def generate_batch_crops(attention_maps, source_sz=384, targ_sz=448, targ_bbox_s
     # calculate scores for all crop candidates
     kernel_size = int(targ_bbox_pct*grid_size)
     AvgPoolLayer = nn.AvgPool2d(kernel_size=kernel_size, stride=1)
-    crop_scores = AvgPoolLayer(attention_maps) 
+    crop_scores = AvgPoolLayer(attention_maps.float()) 
     crop_scores_flat = crop_scores.view(crop_scores.size(0),-1)
 
     # sort by score
